@@ -40,7 +40,6 @@ This file is the canonical, cross-agent instruction entrypoint. Follow the proje
 
 ## 5. Non-negotiable boundaries
 
-- **Defense in depth:** These instructions establish AI behavioral boundaries. Hard server protection must be maintained at the OS and database layers (least-privilege user execution, database grant boundaries, and automated snapshots).
 - Do not reveal, commit, or log secrets or private data.
 - Do not destroy data, rewrite history, force-push, run destructive migrations, change billing/auth policies, deploy, or touch production systems without appropriate explicit authorization and safeguards.
 - Do not overwrite unrelated files, hide failures, or mark work complete without evidence.
