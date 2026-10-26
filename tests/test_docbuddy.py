@@ -60,7 +60,7 @@ VERIF_TEMPLATE = """# Verification Contract
 """
 
 
-class TestOneFreqCLI(unittest.TestCase):
+class TestDocBuddyCLI(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.root = Path(self.temp_dir.name)
