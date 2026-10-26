@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-onefreq - Deterministic evidence-based propose/apply CLI for ONEFREQ Markdown templates.
+DocBuddy - Deterministic evidence-based propose/apply CLI for project Markdown.
 Python 3.11+ standard library only.
 """
 
@@ -494,8 +494,8 @@ def apply(root_dir: str, proposal_file: str) -> int:
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="onefreq",
-        description="Deterministic evidence-based propose/apply for ONEFREQ Markdown templates.",
+        prog="docbuddy",
+        description="Deterministic evidence-based propose/apply for project Markdown.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 

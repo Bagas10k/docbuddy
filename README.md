@@ -16,13 +16,13 @@ It does not use an AI API, send project files over the network, or invent missin
 From the root of a project that contains `.onefreq/ARCHITECTURE.md` and `.onefreq/VERIFICATION.md`:
 
 ```sh
-python /path/to/onefreq-md/onefreq.py propose . --proposal /tmp/onefreq-proposal.json
+python /path/to/docbuddy/docbuddy.py propose . --proposal /tmp/docbuddy-proposal.json
 ```
 
 Review the unified diff printed in the terminal and inspect the saved proposal. To apply it after approval:
 
 ```sh
-python /path/to/onefreq-md/onefreq.py apply . --proposal /tmp/onefreq-proposal.json
+python /path/to/docbuddy/docbuddy.py apply . --proposal /tmp/docbuddy-proposal.json
 ```
 
 `propose` never edits the Markdown targets. `apply` only accepts the two supported `.onefreq` files and rejects a proposal if either source file changed after it was generated. If the project has not adopted ONEFREQ yet, copy `AGENTS.md`, `CLAUDE.md`, and `.onefreq/` into the project root first. Do not overwrite existing agent instructions; merge them deliberately.
@@ -41,7 +41,7 @@ python -m unittest discover -s tests -v
 
 ## Repository contents
 
-- `onefreq.py` — standalone propose/apply CLI.
+- `docbuddy.py` — standalone propose/apply CLI.
 - `tests/` — standard-library tests for proposal generation, explicit apply, stale proposal rejection, and safety cases.
 - `AGENTS.md`, `CLAUDE.md`, `.onefreq/` — bundled ONEFREQ v1.0 Markdown template.
 

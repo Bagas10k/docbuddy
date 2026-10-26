@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Unit tests for onefreq deterministic propose/apply CLI.
+Unit tests for docbuddy deterministic propose/apply CLI.
 Standard library only.
 """
 
@@ -16,9 +16,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-# Ensure onefreq is importable from parent directory
+# Ensure docbuddy is importable from parent directory
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import onefreq
+import docbuddy
 
 ARCH_TEMPLATE = """# Architecture and System Boundaries
 
@@ -103,7 +103,7 @@ line-length = 88
         verif_before = self.verif_file.read_text(encoding="utf-8")
         proposal_file = self.root / "proposal.json"
 
-        exit_code = onefreq.main(["propose", str(self.root), "--proposal", str(proposal_file)])
+        exit_code = docbuddy.main(["propose", str(self.root), "--proposal", str(proposal_file)])
         self.assertEqual(exit_code, 0)
 
         # Targets MUST NOT be mutated during propose
@@ -116,7 +116,7 @@ line-length = 88
         captured = io.StringIO()
 
         with patch("sys.stdout", captured):
-            exit_code = onefreq.main(["propose", str(self.root), "--proposal", str(proposal_file)])
+            exit_code = docbuddy.main(["propose", str(self.root), "--proposal", str(proposal_file)])
 
         self.assertEqual(exit_code, 0)
         output = captured.getvalue()
@@ -133,10 +133,10 @@ line-length = 88
 
     def test_apply_success(self) -> None:
         proposal_file = self.root / "proposal.json"
-        onefreq.main(["propose", str(self.root), "--proposal", str(proposal_file)])
+        docbuddy.main(["propose", str(self.root), "--proposal", str(proposal_file)])
 
         # Apply the proposal
-        exit_code = onefreq.main(["apply", str(self.root), "--proposal", str(proposal_file)])
+        exit_code = docbuddy.main(["apply", str(self.root), "--proposal", str(proposal_file)])
         self.assertEqual(exit_code, 0)
 
         arch_after = self.arch_file.read_text(encoding="utf-8")
@@ -150,14 +150,14 @@ line-length = 88
 
     def test_apply_stale_rejection(self) -> None:
         proposal_file = self.root / "proposal.json"
-        onefreq.main(["propose", str(self.root), "--proposal", str(proposal_file)])
+        docbuddy.main(["propose", str(self.root), "--proposal", str(proposal_file)])
 
         # Simulate concurrent drift/tampering with target file
         self.arch_file.write_text(ARCH_TEMPLATE + "\n# Modified externally\n", encoding="utf-8")
 
         captured_err = io.StringIO()
         with patch("sys.stderr", captured_err):
-            exit_code = onefreq.main(["apply", str(self.root), "--proposal", str(proposal_file)])
+            exit_code = docbuddy.main(["apply", str(self.root), "--proposal", str(proposal_file)])
 
         # Must reject with non-zero exit code
         self.assertNotEqual(exit_code, 0)
@@ -178,7 +178,7 @@ line-length = 88
 
         captured_err = io.StringIO()
         with patch("sys.stderr", captured_err):
-            exit_code = onefreq.main(["apply", str(self.root), "--proposal", str(proposal_file)])
+            exit_code = docbuddy.main(["apply", str(self.root), "--proposal", str(proposal_file)])
 
         self.assertNotEqual(exit_code, 0)
         self.assertTrue(
@@ -192,17 +192,17 @@ line-length = 88
         secret_key = self.root / "id_rsa"
         secret_key.write_text("FAKE RSA PRIVATE KEY\n", encoding="utf-8")
 
-        self.assertTrue(onefreq.is_secret_file(".env"))
-        self.assertTrue(onefreq.is_secret_file(".env.local"))
-        self.assertTrue(onefreq.is_secret_file("server.key"))
-        self.assertTrue(onefreq.is_secret_file("id_rsa"))
-        self.assertFalse(onefreq.is_secret_file("main.py"))
+        self.assertTrue(docbuddy.is_secret_file(".env"))
+        self.assertTrue(docbuddy.is_secret_file(".env.local"))
+        self.assertTrue(docbuddy.is_secret_file("server.key"))
+        self.assertTrue(docbuddy.is_secret_file("id_rsa"))
+        self.assertFalse(docbuddy.is_secret_file("main.py"))
 
         # Propose and ensure no secrets leak into diff or proposal
         proposal_file = self.root / "proposal.json"
         captured = io.StringIO()
         with patch("sys.stdout", captured):
-            exit_code = onefreq.main(["propose", str(self.root), "--proposal", str(proposal_file)])
+            exit_code = docbuddy.main(["propose", str(self.root), "--proposal", str(proposal_file)])
 
         self.assertEqual(exit_code, 0)
         proposal_text = proposal_file.read_text(encoding="utf-8")
@@ -212,7 +212,7 @@ line-length = 88
     def test_secret_directory_name_not_disclosed(self) -> None:
         (self.root / "credentials_backup").mkdir()
         (self.root / "src").mkdir(exist_ok=True)
-        evidence = onefreq.scan_repository_evidence(self.root)
+        evidence = docbuddy.scan_repository_evidence(self.root)
         self.assertNotIn("credentials_backup", evidence["directories"])
 
     def test_symlinked_markdown_target_rejected(self) -> None:
@@ -222,7 +222,7 @@ line-length = 88
         self.arch_file.symlink_to(outside_target)
         captured_err = io.StringIO()
         with patch("sys.stderr", captured_err):
-            exit_code = onefreq.main(["propose", str(self.root)])
+            exit_code = docbuddy.main(["propose", str(self.root)])
         self.assertNotEqual(exit_code, 0)
         self.assertIn("symlinked target", captured_err.getvalue())
         self.assertEqual(outside_target.read_text(encoding="utf-8"), "keep me\n")
@@ -232,7 +232,7 @@ line-length = 88
             '[project]\nname="demo"\ndependencies=["flask-cors", "blackjax", "ruffle", "types-pytest"]\n',
             encoding="utf-8",
         )
-        evidence = onefreq.scan_repository_evidence(self.root)
+        evidence = docbuddy.scan_repository_evidence(self.root)
         self.assertIsNone(evidence["backend"])
         self.assertIn("Unit tests", evidence["commands"])
         self.assertIn("suggested; verify", evidence["commands"]["Unit tests"][0])
@@ -244,7 +244,7 @@ line-length = 88
         proposal_file.write_text("[]", encoding="utf-8")
         captured_err = io.StringIO()
         with patch("sys.stderr", captured_err):
-            exit_code = onefreq.main(["apply", str(self.root), "--proposal", str(proposal_file)])
+            exit_code = docbuddy.main(["apply", str(self.root), "--proposal", str(proposal_file)])
         self.assertNotEqual(exit_code, 0)
         self.assertIn("must be a JSON object", captured_err.getvalue())
 
