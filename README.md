@@ -1,8 +1,8 @@
-# ONEFREQ Markdown Assistant
+# DocBuddy
 
 **Turn repository evidence into reviewable project documentation.**
 
-ONEFREQ Markdown Assistant is a local Python CLI for projects using the bundled [ONEFREQ v1.0](.onefreq/INDEX.md) documentation pack. It reads a small set of repository manifests, proposes evidence-based updates to `.onefreq/ARCHITECTURE.md` and `.onefreq/VERIFICATION.md`, and applies them only when you explicitly request it.
+DocBuddy is a local Python CLI for projects using the bundled [ONEFREQ v1.0](.onefreq/INDEX.md) documentation pack. It reads a small set of repository manifests, proposes evidence-based updates to `.onefreq/ARCHITECTURE.md` and `.onefreq/VERIFICATION.md`, and applies them only when you explicitly request it.
 
 It does not use an AI API, send project files over the network, or invent missing product facts.
 
