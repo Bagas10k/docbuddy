@@ -336,6 +336,67 @@ def enrich_verification(content: str, evidence: Dict[str, Any]) -> str:
     return new_content
 
 
+def adopt(project_dir: str) -> int:
+    """Copy the bundled Markdown context pack without overwriting project files."""
+    bundle_root = Path(__file__).resolve().parent
+    root = Path(project_dir).expanduser().resolve()
+    if root.exists() and not root.is_dir():
+        sys.stderr.write(f"Error: Project path is not a directory: {root}\n")
+        return 1
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        sys.stderr.write(f"Error creating project directory: {e}\n")
+        return 1
+
+    template_paths = [Path("AGENTS.md"), Path("CLAUDE.md")]
+    template_paths.extend(
+        path.relative_to(bundle_root)
+        for path in sorted((bundle_root / ".onefreq").rglob("*.md"))
+        if path.is_file() and not path.is_symlink()
+    )
+
+    # Preflight all destinations before writing anything; never traverse project symlinks.
+    destinations: List[Tuple[Path, Path]] = []
+    for relative in template_paths:
+        source = bundle_root / relative
+        destination = root / relative
+        parent = root
+        for part in relative.parent.parts:
+            if part == ".":
+                continue
+            parent = parent / part
+            if parent.is_symlink():
+                sys.stderr.write(f"Error: Refusing symlinked destination directory: {parent}\n")
+                return 1
+            if parent.exists() and not parent.is_dir():
+                sys.stderr.write(f"Error: Destination parent is not a directory: {parent}\n")
+                return 1
+        if destination.is_symlink():
+            continue  # Treat any existing project entry as owner-managed; never follow it.
+        if destination.exists():
+            continue
+        destinations.append((source, destination))
+
+    created: List[str] = []
+    skipped = len(template_paths) - len(destinations)
+    try:
+        for source, destination in destinations:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with source.open("rb") as src, destination.open("xb") as dst:
+                dst.write(src.read())
+            created.append(destination.relative_to(root).as_posix())
+    except OSError as e:
+        sys.stderr.write(f"Error adopting template files: {e}\n")
+        return 1
+
+    sys.stdout.write(f"DocBuddy added {len(created)} template files; preserved {skipped} existing entries.\n")
+    for name in created:
+        sys.stdout.write(f"+ {name}\n")
+    sys.stdout.write("Next: run `python docbuddy.py propose <project> --proposal <proposal.json>` to generate evidence-based documentation suggestions.\n")
+    return 0
+
+
 def propose(root_dir: str, proposal_out: Optional[str] = None) -> int:
     root = Path(root_dir).resolve()
     if not root.is_dir():
@@ -499,8 +560,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    adopt_parser = subparsers.add_parser("adopt", help="Copy bundled project documentation into a project without overwriting existing files.")
+    adopt_parser.add_argument("path", help="Project root directory to initialize or update.")
+
     # Propose subcommand
     propose_parser = subparsers.add_parser("propose", help="Scan repository and output proposed changes.")
+
     propose_parser.add_argument("path", help="Project root directory to scan.")
     propose_parser.add_argument("--proposal", help="Path to write the proposal JSON file.", default=None)
 
@@ -511,7 +576,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     args = parser.parse_args(argv)
 
-    if args.command == "propose":
+    if args.command == "adopt":
+        return adopt(args.path)
+    elif args.command == "propose":
         return propose(args.path, args.proposal)
     elif args.command == "apply":
         return apply(args.path, args.proposal)

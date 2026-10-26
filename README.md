@@ -11,21 +11,31 @@ It does not use an AI API, send project files over the network, or invent missin
 - Python 3.11 or newer
 - No third-party Python dependencies
 
-## Quick start
+## Start or prepare a project
 
-From the root of a project that contains `.onefreq/ARCHITECTURE.md` and `.onefreq/VERIFICATION.md`:
+Clone this repository, then run DocBuddy from this folder.
 
-```sh
-python /path/to/docbuddy/docbuddy.py propose . --proposal /tmp/docbuddy-proposal.json
-```
-
-Review the unified diff printed in the terminal and inspect the saved proposal. To apply it after approval:
+For a new or existing project, copy in the bundled documentation pack:
 
 ```sh
-python /path/to/docbuddy/docbuddy.py apply . --proposal /tmp/docbuddy-proposal.json
+python docbuddy.py adopt /path/to/your-project
 ```
 
-`propose` never edits the Markdown targets. `apply` only accepts the two supported `.onefreq` files and rejects a proposal if either source file changed after it was generated. If the project has not adopted ONEFREQ yet, copy `AGENTS.md`, `CLAUDE.md`, and `.onefreq/` into the project root first. Do not overwrite existing agent instructions; merge them deliberately.
+This adds `AGENTS.md`, `CLAUDE.md`, and the 15 Markdown files under `.onefreq/`. Existing files are preserved; DocBuddy does not overwrite them. Review the copied `PROJECT_BRIEF.md` and fill in the project-specific purpose and goals yourself.
+
+Next, ask DocBuddy to suggest updates based on the project files:
+
+```sh
+python docbuddy.py propose /path/to/your-project --proposal /tmp/docbuddy-proposal.json
+```
+
+Review the printed diff and proposal. Only if the suggestions look right, apply them:
+
+```sh
+python docbuddy.py apply /path/to/your-project --proposal /tmp/docbuddy-proposal.json
+```
+
+The `propose` command never edits documentation. `apply` updates only `.onefreq/ARCHITECTURE.md` and `.onefreq/VERIFICATION.md`, and rejects stale proposals if either target changed since the proposal was created. DocBuddy prepares project context for developers and coding agents; it does **not** generate application code or run autonomously in the background.
 
 ## What it inspects
 

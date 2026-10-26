@@ -98,6 +98,39 @@ line-length = 88
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
+    def test_adopt_new_project_copies_bundle(self) -> None:
+        target = self.root / "fresh-project"
+        exit_code = docbuddy.main(["adopt", str(target)])
+        self.assertEqual(exit_code, 0)
+        self.assertTrue((target / "AGENTS.md").is_file())
+        self.assertTrue((target / "CLAUDE.md").is_file())
+        self.assertTrue((target / ".onefreq" / "PROJECT_BRIEF.md").is_file())
+        self.assertEqual(len(list(target.rglob("*.md"))), 17)
+
+    def test_adopt_preserves_existing_files_and_adds_missing(self) -> None:
+        target = self.root / "existing-project"
+        target.mkdir()
+        (target / "AGENTS.md").write_text("project-owned instructions\\n", encoding="utf-8")
+        exit_code = docbuddy.main(["adopt", str(target)])
+        self.assertEqual(exit_code, 0)
+        self.assertEqual((target / "AGENTS.md").read_text(encoding="utf-8"), "project-owned instructions\\n")
+        self.assertTrue((target / "CLAUDE.md").is_file())
+        self.assertTrue((target / ".onefreq" / "PROJECT_BRIEF.md").is_file())
+
+    def test_adopt_rejects_symlinked_pack_directory_without_writing(self) -> None:
+        target = self.root / "symlinked-project"
+        target.mkdir()
+        external = self.root / "external"
+        external.mkdir()
+        (target / ".onefreq").symlink_to(external, target_is_directory=True)
+        captured_err = io.StringIO()
+        with patch("sys.stderr", captured_err):
+            exit_code = docbuddy.main(["adopt", str(target)])
+        self.assertNotEqual(exit_code, 0)
+        self.assertIn("Refusing symlinked destination directory", captured_err.getvalue())
+        self.assertEqual(list(external.iterdir()), [])
+        self.assertFalse((target / "AGENTS.md").exists())
+
     def test_propose_no_target_mutation(self) -> None:
         arch_before = self.arch_file.read_text(encoding="utf-8")
         verif_before = self.verif_file.read_text(encoding="utf-8")
