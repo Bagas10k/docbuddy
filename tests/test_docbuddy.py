@@ -285,7 +285,7 @@ line-length = 88
         state_file = self.onefreq_dir / "CURRENT_STATE.md"
         state_file.write_text("# Current State — Cross-Agent Handoff\n\n**Last validated update:** `UNSET`\n\n**Source branch / commit or worktree identification:** `UNSET`\n\n**Current goal and acceptance criteria:** `UNSET`\n\n**Work status:** `NOT INITIALIZED`\n\n## Completed changes (exact paths and observable behavior)\n\n- `NONE DOCUMENTED`\n", encoding="utf-8")
         
-        exit_code = onefreq.main(["state", str(self.root), "--status", "IN_PROGRESS", "--goal", "Build auth module", "--slice", "Added user model"])
+        exit_code = docbuddy.main(["state", str(self.root), "--status", "IN_PROGRESS", "--goal", "Build auth module", "--slice", "Added user model"])
         self.assertEqual(exit_code, 0)
         
         updated_content = state_file.read_text(encoding="utf-8")
@@ -297,7 +297,7 @@ line-length = 88
         adr_file = self.onefreq_dir / "DECISION_RECORDS.md"
         adr_file.write_text("# Decision Records\n\n## ADR index\n\n| ID | Status | Decision | Evidence/location |\n| --- | --- | --- | --- |\n| `NONE` | — | No project-specific decision has yet been approved or recorded. | — |\n", encoding="utf-8")
         
-        exit_code = onefreq.main(["adr", str(self.root), "--title", "Use PostgreSQL", "--decision", "Adopt Postgres", "--why", "ACID compliance"])
+        exit_code = docbuddy.main(["adr", str(self.root), "--title", "Use PostgreSQL", "--decision", "Adopt Postgres", "--why", "ACID compliance"])
         self.assertEqual(exit_code, 0)
         
         updated = adr_file.read_text(encoding="utf-8")
@@ -309,7 +309,7 @@ line-length = 88
     def test_report_cmd_generate(self) -> None:
         captured_out = io.StringIO()
         with patch("sys.stdout", captured_out):
-            exit_code = onefreq.main(["report", str(self.root), "--status", "ACCEPTED"])
+            exit_code = docbuddy.main(["report", str(self.root), "--status", "ACCEPTED"])
         self.assertEqual(exit_code, 0)
         out = captured_out.getvalue()
         self.assertIn("Engineering Execution Report", out)
