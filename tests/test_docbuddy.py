@@ -315,6 +315,19 @@ line-length = 88
         self.assertIn("Engineering Execution Report", out)
         self.assertIn("**Status Operasional:** ACCEPTED", out)
 
+    def test_composer_json_detection(self) -> None:
+        composer_file = self.root / "composer.json"
+        composer_file.write_text(
+            '{"require": {"php": "^8.3", "laravel/framework": "^11.0"}, "require-dev": {"laravel/pint": "^1.0"}}',
+            encoding="utf-8",
+        )
+        evidence = docbuddy.scan_repository_evidence(self.root)
+        self.assertEqual(evidence["runtime"], "PHP ^8.3")
+        self.assertEqual(evidence["backend"], "Laravel")
+        self.assertIn("composer", evidence["build"])
+        self.assertEqual(evidence["commands"]["Unit tests"][0], "php artisan test")
+        self.assertEqual(evidence["commands"]["Format"][0], "./vendor/bin/pint --test")
+
 
 if __name__ == "__main__":
     unittest.main()

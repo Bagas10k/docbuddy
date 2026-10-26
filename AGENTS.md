@@ -8,7 +8,7 @@ This file is the canonical, cross-agent instruction entrypoint. Follow the proje
 
 1. Identify the current user task, target files, repository state, and relevant tests.
 2. Use `.onefreq/PROJECT_BRIEF.md` for product intent; `.onefreq/ARCHITECTURE.md` for structural changes; `.onefreq/VERIFICATION.md` for test commands; `.onefreq/SAFETY_BOUNDARIES.md` for risky work.
-3. Read other `.onefreq/` documents **only when relevant**, using `.onefreq/INDEX.md` to locate them. A typo fix does not require reading the entire protocol.
+3. **Strict token conservation rule:** Do NOT read all files in `.onefreq/`. For 95% of tasks, inspect ONLY `.onefreq/ARCHITECTURE.md` and `.onefreq/VERIFICATION.md`. Read other files strictly on-demand when relevant to the task, using `.onefreq/INDEX.md` to locate them. Never load the entire directory into memory unprompted. A typo fix or routine feature does not require reading the entire protocol.
 4. If project metadata says `UNSET`, check repository evidence first. Mark uncertain facts as `UNKNOWN`; do not invent paths, commands, integrations, guarantees, or decisions.
 5. Check the current working tree before edits. Preserve unrelated user changes.
 
@@ -40,6 +40,7 @@ This file is the canonical, cross-agent instruction entrypoint. Follow the proje
 
 ## 5. Non-negotiable boundaries
 
+- **Defense in depth:** These instructions establish AI behavioral boundaries. Hard server protection must be maintained at the OS and database layers (least-privilege user execution, database grant boundaries, and automated snapshots).
 - Do not reveal, commit, or log secrets or private data.
 - Do not destroy data, rewrite history, force-push, run destructive migrations, change billing/auth policies, deploy, or touch production systems without appropriate explicit authorization and safeguards.
 - Do not overwrite unrelated files, hide failures, or mark work complete without evidence.

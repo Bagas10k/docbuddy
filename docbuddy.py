@@ -268,6 +268,67 @@ def scan_repository_evidence(root: Path) -> Dict[str, Any]:
         except Exception:
             pass
 
+    # 5. composer.json (PHP / Laravel / Symfony)
+    composer_path = root / "composer.json"
+    if composer_path.is_file() and not composer_path.is_symlink():
+        try:
+            with open(composer_path, "r", encoding="utf-8") as f:
+                composer_data = json.load(f)
+            req = composer_data.get("require", {})
+            dev_req = composer_data.get("require-dev", {})
+            all_deps = {**req, **dev_req}
+
+            php_ver = req.get("php")
+            evidence["runtime"] = f"PHP {php_ver}" if php_ver else "PHP"
+            evidence["build"] = "composer (composer.json)"
+            evidence["commands"]["Install/setup"] = ("composer install", "composer.json")
+
+            if "laravel/framework" in req:
+                evidence["backend"] = "Laravel"
+                evidence["commands"]["Unit tests"] = ("php artisan test", "composer.json (Laravel)")
+                if "laravel/pint" in all_deps:
+                    evidence["commands"]["Format"] = ("./vendor/bin/pint --test", "composer.json (Laravel Pint)")
+            elif "symfony/framework-bundle" in req or "symfony/symfony" in req:
+                evidence["backend"] = "Symfony"
+                evidence["commands"]["Unit tests"] = ("php bin/phpunit", "composer.json (Symfony)")
+            elif "phpunit/phpunit" in all_deps:
+                evidence["commands"]["Unit tests"] = ("./vendor/bin/phpunit", "composer.json (PHPUnit)")
+
+            if "phpstan/phpstan" in all_deps:
+                evidence["commands"]["Lint/static analysis"] = ("./vendor/bin/phpstan analyse", "composer.json (PHPStan)")
+        except Exception:
+            pass
+
+    # 6. requirements.txt (Python fallback when pyproject.toml is absent)
+    req_txt_path = root / "requirements.txt"
+    if not evidence.get("runtime") and req_txt_path.is_file() and not req_txt_path.is_symlink():
+        try:
+            content_req = req_txt_path.read_text(encoding="utf-8", errors="ignore").lower()
+            evidence["runtime"] = f"Python {sys.version_info.major}.{sys.version_info.minor}"
+            evidence["build"] = "pip (requirements.txt)"
+            evidence["commands"]["Install/setup"] = ("pip install -r requirements.txt", "requirements.txt")
+            if "fastapi" in content_req:
+                evidence["backend"] = "FastAPI"
+            elif "django" in content_req:
+                evidence["backend"] = "Django"
+            elif "flask" in content_req:
+                evidence["backend"] = "Flask"
+            if "pytest" in content_req:
+                evidence["commands"]["Unit tests"] = ("pytest", "requirements.txt declares pytest")
+        except Exception:
+            pass
+
+    # 7. Docker / Docker Compose
+    compose_path = root / "docker-compose.yml"
+    if not compose_path.is_file():
+        compose_path = root / "compose.yaml"
+    if compose_path.is_file() and not compose_path.is_symlink():
+        current_build = evidence.get("build")
+        evidence["build"] = f"{current_build} + Docker Compose" if current_build else "Docker Compose"
+    elif (root / "Dockerfile").is_file() and not (root / "Dockerfile").is_symlink():
+        current_build = evidence.get("build")
+        evidence["build"] = f"{current_build} + Docker" if current_build else "Docker"
+
     # Directory fallback may suggest a generic command, never infer a test framework.
     if "Unit tests" not in evidence["commands"]:
         tests_dir = root / "tests"
@@ -352,6 +413,8 @@ def adopt(project_dir: str) -> int:
         return 1
 
     template_paths = [Path("AGENTS.md"), Path("CLAUDE.md")]
+    if (bundle_root / ".gitattributes").is_file():
+        template_paths.append(Path(".gitattributes"))
     template_paths.extend(
         path.relative_to(bundle_root)
         for path in sorted((bundle_root / ".onefreq").rglob("*.md"))
