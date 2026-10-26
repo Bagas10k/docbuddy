@@ -49,6 +49,32 @@ It deliberately leaves business purpose, module ownership, data semantics, and o
 python -m unittest discover -s tests -v
 ```
 
+## CLI Subcommands
+
+DocBuddy supports six deterministic subcommands designed for long-horizon builds:
+
+```sh
+# 1. Propose evidence-based updates from manifests
+python onefreq.py propose . --proposal /tmp/onefreq-proposal.json
+
+# 2. Apply reviewed updates atomically
+python onefreq.py apply . --proposal /tmp/onefreq-proposal.json
+
+# 3. State: inspect or update active build state (.onefreq/CURRENT_STATE.md)
+python onefreq.py state .
+python onefreq.py state . --status IN_PROGRESS --goal "Implement auth" --slice "Added user model" --next "Add login route"
+
+# 4. ADR: append an Architecture Decision Record (.onefreq/DECISION_RECORDS.md)
+python onefreq.py adr . --title "Use PostgreSQL" --decision "Adopt Postgres" --why "ACID compliance" --alternatives "MySQL, SQLite"
+
+# 5. Report: generate an Engineering Execution Report v2.0
+python onefreq.py report . --status ACCEPTED --deployment STAGING_TESTED
+
+# 6. Verify: inspect or run checks from .onefreq/VERIFICATION.md
+python onefreq.py verify .
+python onefreq.py verify . --run
+```
+
 ## Repository contents
 
 - `docbuddy.py` — standalone propose/apply CLI.

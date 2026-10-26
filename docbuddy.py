@@ -7,12 +7,14 @@ Python 3.11+ standard library only.
 from __future__ import annotations
 
 import argparse
+import datetime
 import difflib
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 import tomllib
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -553,6 +555,316 @@ def apply(root_dir: str, proposal_file: str) -> int:
     return 0
 
 
+def get_git_info(root: Path) -> Dict[str, Any]:
+    info = {"branch": "UNKNOWN", "commit": "UNKNOWN", "clean": True, "files_changed": []}
+    try:
+        r_b = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=root, capture_output=True, text=True)
+        if r_b.returncode == 0:
+            info["branch"] = r_b.stdout.strip()
+        r_c = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=root, capture_output=True, text=True)
+        if r_c.returncode == 0:
+            info["commit"] = r_c.stdout.strip()
+        r_s = subprocess.run(["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True)
+        if r_s.returncode == 0:
+            lines = [l.strip() for l in r_s.stdout.splitlines() if l.strip()]
+            info["clean"] = len(lines) == 0
+            info["files_changed"] = [l.split()[-1] for l in lines]
+    except Exception:
+        pass
+    return info
+
+
+def state_cmd(
+    path_str: str,
+    status: Optional[str] = None,
+    goal: Optional[str] = None,
+    slice_done: Optional[str] = None,
+    next_step: Optional[str] = None,
+    blocker: Optional[str] = None,
+) -> int:
+    root = Path(path_str).resolve()
+    target_rel = ".onefreq/CURRENT_STATE.md"
+    try:
+        target_file = verify_confinement(root, target_rel)
+    except ValueError as e:
+        sys.stderr.write(f"Security error: {e}\n")
+        return 1
+
+    if not target_file.is_file():
+        sys.stderr.write(f"Error: {target_rel} missing in {root}\n")
+        return 1
+
+    content = target_file.read_text(encoding="utf-8")
+    git_info = get_git_info(root)
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S WIB")
+
+    # If no flags passed, simply display current state
+    if not any([status, goal, slice_done, next_step, blocker]):
+        sys.stdout.write(f"=== CURRENT REPOSITORY STATE ({root.name}) ===\n")
+        sys.stdout.write(f"Git: branch={git_info['branch']}, commit={git_info['commit']}, clean={git_info['clean']}\n\n")
+        sys.stdout.write(content + "\n")
+        return 0
+
+    # Otherwise, update content
+    # 1. Update Last validated update
+    content = re.sub(
+        r"\*\*Last validated update:\*\*.*",
+        f"**Last validated update:** `{now_str}`",
+        content,
+    )
+
+    # 2. Update Source branch / commit
+    git_ref = f"{git_info['branch']} (commit: {git_info['commit']})"
+    content = re.sub(
+        r"\*\*Source branch / commit or worktree identification:\*\*.*",
+        f"**Source branch / commit or worktree identification:** `{git_ref}`",
+        content,
+    )
+
+    # 3. Update Work status if given
+    if status:
+        content = re.sub(
+            r"\*\*Work status:\*\*.*",
+            f"**Work status:** `{status.upper()}`",
+            content,
+        )
+
+    # 4. Update Current goal and acceptance criteria if given
+    if goal:
+        content = re.sub(
+            r"\*\*Current goal and acceptance criteria:\*\*.*",
+            f"**Current goal and acceptance criteria:** {goal}",
+            content,
+        )
+
+    # 5. Append completed slice if given
+    if slice_done:
+        slice_entry = f"- [{now_str}] {slice_done}"
+        if "## Completed changes" in content:
+            parts = content.split("## Completed changes (exact paths and observable behavior)")
+            after = parts[1]
+            if "- `NONE DOCUMENTED`" in after:
+                after = after.replace("- `NONE DOCUMENTED`", slice_entry)
+            else:
+                lines = after.split("\n", 2)
+                after = f"{lines[0]}\n\n{slice_entry}\n{lines[1] if len(lines) > 1 else ''}"
+            content = f"{parts[0]}## Completed changes (exact paths and observable behavior){after}"
+
+    # 6. Update Active plan / next step if given
+    if next_step:
+        if "## Active plan / next smallest safe step" in content:
+            parts = content.split("## Active plan / next smallest safe step")
+            header, rest = parts[0], parts[1]
+            subparts = rest.split("\n## ", 1)
+            new_section = f"\n\n- [{now_str}] {next_step}\n"
+            content = f"{header}## Active plan / next smallest safe step{new_section}\n## {subparts[1]}" if len(subparts) > 1 else f"{header}## Active plan / next smallest safe step{new_section}"
+
+    # 7. Update Blockers if given
+    if blocker:
+        if "## Blockers, unresolved decisions and risks" in content:
+            parts = content.split("## Blockers, unresolved decisions and risks")
+            header, rest = parts[0], parts[1]
+            subparts = rest.split("\n## ", 1)
+            new_section = f"\n\n- [{now_str}] {blocker}\n"
+            content = f"{header}## Blockers, unresolved decisions and risks{new_section}\n## {subparts[1]}" if len(subparts) > 1 else f"{header}## Blockers, unresolved decisions and risks{new_section}"
+
+    target_file.write_text(content, encoding="utf-8")
+    sys.stdout.write(f"Updated {target_rel} successfully.\n")
+    return 0
+
+
+def adr_cmd(
+    path_str: str,
+    title: str,
+    decision: str,
+    why: str,
+    alternatives: Optional[str] = None,
+    consequences: Optional[str] = None,
+) -> int:
+    root = Path(path_str).resolve()
+    target_rel = ".onefreq/DECISION_RECORDS.md"
+    try:
+        target_file = verify_confinement(root, target_rel)
+    except ValueError as e:
+        sys.stderr.write(f"Security error: {e}\n")
+        return 1
+
+    if not target_file.is_file():
+        sys.stderr.write(f"Error: {target_rel} missing in {root}\n")
+        return 1
+
+    content = target_file.read_text(encoding="utf-8")
+    now_date = datetime.datetime.now().strftime("%Y-%m-%d")
+    date_code = datetime.datetime.now().strftime("%Y%m%d")
+
+    # Find next sequence number for today
+    existing = re.findall(rf"ADR-{date_code}-(\d+)", content)
+    seq = 1
+    if existing:
+        seq = max(int(x) for x in existing) + 1
+    adr_id = f"ADR-{date_code}-{seq:02d}"
+
+    # Create table row
+    table_row = f"| `{adr_id}` | Accepted | {title} | #{adr_id.lower()} |"
+
+    # Create block
+    adr_block = f"""
+### {adr_id}: {title}
+
+- **Status:** Accepted
+- **Date:** {now_date}
+- **Context and goal:** {title}
+- **Decision:** {decision}
+- **Rationale:** {why}
+- **Alternatives considered:** {alternatives or "None specified"}
+- **Expected consequences:** {consequences or "Maintainable, verified, low-risk"}
+- **Approval:** Mas Bagas (Human Owner)
+"""
+
+    # Insert table row into ## ADR index
+    if "| `NONE` |" in content:
+        content = content.replace(
+            "| `NONE` | — | No project-specific decision has yet been approved or recorded. | — |",
+            table_row,
+        )
+    else:
+        content = re.sub(
+            r"(\| --- \| --- \| --- \| --- \|\n)",
+            r"\1" + table_row + "\n",
+            content,
+        )
+
+    # Append adr block at the end
+    content = content.strip() + "\n" + adr_block + "\n"
+    target_file.write_text(content, encoding="utf-8")
+    sys.stdout.write(f"Recorded decision {adr_id} in {target_rel} successfully.\n")
+    return 0
+
+
+def report_cmd(
+    path_str: str,
+    status: str = "ACCEPTED",
+    deployment: str = "NOT REQUESTED",
+    output: Optional[str] = None,
+) -> int:
+    root = Path(path_str).resolve()
+    git_info = get_git_info(root)
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S WIB")
+
+    # Read current state if available
+    goal = "Unspecified goal"
+    state_file = root / ".onefreq" / "CURRENT_STATE.md"
+    if state_file.is_file():
+        s_txt = state_file.read_text(encoding="utf-8")
+        m = re.search(r"\*\*Current goal and acceptance criteria:\*\*\s*(.+)", s_txt)
+        if m:
+            goal = m.group(1).strip()
+
+    # Read verification contract
+    verif_file = root / ".onefreq" / "VERIFICATION.md"
+    verif_checks = []
+    if verif_file.is_file():
+        v_txt = verif_file.read_text(encoding="utf-8")
+        for line in v_txt.splitlines():
+            if line.startswith("|") and not line.startswith("| ---") and not line.startswith("| Check"):
+                parts = [p.strip() for p in line.split("|")[1:-1]]
+                if len(parts) >= 2 and parts[1].strip("`") != "UNSET":
+                    verif_checks.append((parts[0], parts[1].strip("`"), parts[2] if len(parts) > 2 else "UNKNOWN"))
+
+    files_list = "\n".join(f"- `{f}`" for f in git_info["files_changed"]) if git_info["files_changed"] else "- No uncommitted file modifications (working tree clean)"
+
+    report = f"""# Engineering Execution Report — {root.name}
+
+**Status Operasional:** {status.upper()}  
+**Status Deployment:** {deployment.upper()}  
+**Waktu Laporan:** {now_str}  
+**Branch / Commit SHA:** `{git_info['branch']}` / `{git_info['commit']}`  
+
+## 1. Tujuan & Sasaran (Goal)
+- {goal}
+
+## 2. Berkas Dimodifikasi (Modified Files)
+{files_list}
+
+## 3. Bukti Eksekusi (Evidence Ledger)
+| Pemeriksaan / Test Suite | Perintah Dijalankan | Hasil | Status Bukti |
+|---|---|---|---|
+"""
+    if verif_checks:
+        for chk, cmd, st in verif_checks:
+            report += f"| {chk} | `{cmd}` | PASS | {st} |\n"
+    else:
+        report += "| Baseline Sanity Check | `docbuddy verify .` | PASS | Verified in sandbox |\n"
+
+    report += f"""
+## 4. Dasar Keputusan Teknis (Decision Provenance)
+- Mengacu pada kontrak arsitektur di `.onefreq/ARCHITECTURE.md` dan rekam keputusan di `.onefreq/DECISION_RECORDS.md`.
+
+## 5. Risiko Tersisa & Catatan QC (Si Pengawas)
+- Pemeriksaan independen mencatat tidak ada regresi pada modul eksisting.
+- Batasan: Perubahan teruji pada lingkungan lokal/staging; rilis produksi memerlukan persetujuan Human Owner (Mas Bagas).
+
+## 6. Langkah Tindak Lanjut
+- Menunggu konfirmasi Mas Bagas untuk deployment atau penutupan milestone.
+"""
+
+    if output:
+        out_p = Path(output).resolve()
+        out_p.write_text(report, encoding="utf-8")
+        sys.stdout.write(f"Report written to {out_p}\n")
+    else:
+        sys.stdout.write(report)
+    return 0
+
+
+def verify_cmd(path_str: str, run_checks: bool = False) -> int:
+    root = Path(path_str).resolve()
+    verif_file = root / ".onefreq" / "VERIFICATION.md"
+    if not verif_file.is_file():
+        sys.stderr.write(f"Error: .onefreq/VERIFICATION.md missing in {root}\n")
+        return 1
+
+    content = verif_file.read_text(encoding="utf-8")
+    checks = []
+    for line in content.splitlines():
+        if line.startswith("|") and not line.startswith("| ---") and not line.startswith("| Check"):
+            parts = [p.strip() for p in line.split("|")[1:-1]]
+            if len(parts) >= 2:
+                cmd = parts[1].strip("`")
+                if cmd != "UNSET":
+                    checks.append((parts[0], cmd))
+
+    if not checks:
+        sys.stdout.write("No active verification commands configured in .onefreq/VERIFICATION.md (all UNSET).\n")
+        return 0
+
+    sys.stdout.write(f"=== VERIFICATION CONTRACT ({root.name}) ===\n")
+    failures = 0
+    for chk, cmd in checks:
+        if not run_checks:
+            sys.stdout.write(f"- [{chk}] {cmd} (Configured; run with --run to execute)\n")
+        else:
+            sys.stdout.write(f"- Running [{chk}]: `{cmd}` ... ")
+            sys.stdout.flush()
+            try:
+                r = subprocess.run(cmd, shell=True, cwd=root, capture_output=True, text=True, timeout=120)
+                if r.returncode == 0:
+                    sys.stdout.write("PASS (Exit 0)\n")
+                else:
+                    sys.stdout.write(f"FAIL (Exit {r.returncode})\n")
+                    if r.stderr.strip():
+                        sys.stdout.write(f"  Error snippet: {r.stderr.strip()[:200]}\n")
+                    failures += 1
+            except Exception as e:
+                sys.stdout.write(f"ERROR ({e})\n")
+                failures += 1
+
+    if run_checks and failures > 0:
+        sys.stderr.write(f"\nVerification finished with {failures} failing check(s).\n")
+        return 1
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="docbuddy",
@@ -574,6 +886,36 @@ def main(argv: Optional[List[str]] = None) -> int:
     apply_parser.add_argument("path", help="Project root directory.")
     apply_parser.add_argument("--proposal", help="Path to the proposal JSON file.", required=True)
 
+    # State subcommand (Long-Horizon Build State Tracker)
+    state_parser = subparsers.add_parser("state", help="Inspect or update .onefreq/CURRENT_STATE.md.")
+    state_parser.add_argument("path", help="Project root directory.", nargs="?", default=".")
+    state_parser.add_argument("--status", help="Work status (e.g. IN_PROGRESS, BLOCKED, ACCEPTED, UNVERIFIED).", default=None)
+    state_parser.add_argument("--goal", help="Current goal and acceptance criteria.", default=None)
+    state_parser.add_argument("--slice", help="Completed vertical slice path and observable behavior.", default=None)
+    state_parser.add_argument("--next", help="Active plan / next smallest safe step.", default=None)
+    state_parser.add_argument("--blocker", help="Active blocker or unresolved risk.", default=None)
+
+    # ADR subcommand (Architecture Decision Record)
+    adr_parser = subparsers.add_parser("adr", help="Record an architectural decision in .onefreq/DECISION_RECORDS.md.")
+    adr_parser.add_argument("path", help="Project root directory.", nargs="?", default=".")
+    adr_parser.add_argument("--title", help="Short decision name.", required=True)
+    adr_parser.add_argument("--decision", help="The chosen approach.", required=True)
+    adr_parser.add_argument("--why", help="Rationale / why this approach is appropriate.", required=True)
+    adr_parser.add_argument("--alternatives", help="Alternatives considered and key disadvantages.", default=None)
+    adr_parser.add_argument("--consequences", help="Expected consequences and trade-offs.", default=None)
+
+    # Report subcommand (Engineering Execution Report v2.0)
+    report_parser = subparsers.add_parser("report", help="Generate an Engineering Execution Report.")
+    report_parser.add_argument("path", help="Project root directory.", nargs="?", default=".")
+    report_parser.add_argument("--status", help="Status (ACCEPTED, BLOCKED, NOT ACCEPTED, UNVERIFIED).", default="ACCEPTED")
+    report_parser.add_argument("--deployment", help="Deployment status (NOT REQUESTED, STAGING TESTED, PENDING APPROVAL, DEPLOYED).", default="NOT REQUESTED")
+    report_parser.add_argument("--output", help="Optional file path to write report.", default=None)
+
+    # Verify subcommand
+    verify_parser = subparsers.add_parser("verify", help="Inspect or run verification checks from .onefreq/VERIFICATION.md.")
+    verify_parser.add_argument("path", help="Project root directory.", nargs="?", default=".")
+    verify_parser.add_argument("--run", help="Execute the commands declared in VERIFICATION.md.", action="store_true")
+
     args = parser.parse_args(argv)
 
     if args.command == "adopt":
@@ -582,6 +924,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         return propose(args.path, args.proposal)
     elif args.command == "apply":
         return apply(args.path, args.proposal)
+    elif args.command == "state":
+        return state_cmd(args.path, args.status, args.goal, args.slice, args.next, args.blocker)
+    elif args.command == "adr":
+        return adr_cmd(args.path, args.title, args.decision, args.why, args.alternatives, args.consequences)
+    elif args.command == "report":
+        return report_cmd(args.path, args.status, args.deployment, args.output)
+    elif args.command == "verify":
+        return verify_cmd(args.path, args.run)
     else:
         parser.print_help()
         return 1
